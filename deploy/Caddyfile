@@ -1,0 +1,61 @@
+# ==============================================================================
+# /etc/caddy/Caddyfile — Host Caddy Production Configuration for ChronoMed
+# ==============================================================================
+# Replace `schedule.hospital-example.org` with your production DNS hostname.
+# Caddy automatically provisions and renews TLS certificates via Let's Encrypt / ZeroSSL.
+
+schedule.hospital-example.org {
+    # 1. Enable high-efficiency Zstandard and Gzip response compression
+    encode zstd gzip
+
+    # 2. Security headers suitable for clinical web & mobile PWA deployments
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+
+    # 3. Reverse Proxy FastAPI REST API & OpenAPI Docs to Loopback Docker Container
+    @backend_routes {
+        path /api/* /docs* /redoc* /openapi.json
+    }
+    handle @backend_routes {
+        reverse_proxy 127.0.0.1:8000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # 4. Serve Compiled Vue 3 PWA Static Bundle from /var/www/medical-app
+    handle {
+        root * /var/www/medical-app
+
+        # Ensure Service Worker and Web App Manifest are never stale-cached by browsers
+        @pwa_control_files {
+            path /sw.js /registerSW.js /manifest.webmanifest /index.html
+        }
+        header @pwa_control_files Cache-Control "no-cache, no-store, must-revalidate"
+
+        # Immutable long-term caching for Vite fingerprinted assets (/assets/*)
+        @hashed_assets {
+            path /assets/*
+        }
+        header @hashed_assets Cache-Control "public, max-age=31536000, immutable"
+
+        # Client-side Vue Router SPA fallback
+        try_files {path} /index.html
+        file_server
+    }
+
+    # 5. Structured access logging
+    log {
+        output file /var/log/caddy/chronomed-access.log {
+            roll_size 50MiB
+            roll_keep 5
+        }
+    }
+}

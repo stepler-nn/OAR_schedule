@@ -1,0 +1,25 @@
+{
+  "name": "chronomed-frontend-pwa",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5173",
+    "build": "vite build",
+    "preview": "vite preview --port 4173"
+  },
+  "dependencies": {
+    "lucide-vue-next": "^0.475.0",
+    "pinia": "^3.0.1",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.6",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "tailwindcss": "^4.0.6",
+    "vite": "^6.1.0",
+    "vite-plugin-pwa": "^0.21.1",
+    "workbox-window": "^7.3.0"
+  }
+}
