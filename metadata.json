@@ -1,0 +1,6 @@
+{
+  "name": "ChronoMed ICU & OR Scheduler",
+  "description": "Self-hosted Anesthesiology & Intensive Care (ICU) scheduling, parent-child shift validation, 32h fatigue tracking, and FSM shift-swap platform.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
