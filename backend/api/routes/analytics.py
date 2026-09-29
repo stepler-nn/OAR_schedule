@@ -10,8 +10,6 @@ Endpoints:
   and per hospital for administrative review and payroll/time-sheet exports.
 """
 
-from __future__ import annotations
-
 from typing import Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, Query, status

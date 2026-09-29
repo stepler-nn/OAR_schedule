@@ -1,12 +1,14 @@
 # Core FastAPI & ASGI Server
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
-pydantic==2.10.4
+pydantic[email]==2.10.4
+email-validator==2.2.0
 python-multipart==0.0.20
 
 # Async ORM & SQLite Driver (WAL Mode)
 sqlmodel==0.0.22
 sqlalchemy[asyncio]==2.0.36
+greenlet==3.1.1
 aiosqlite==0.20.0
 
 # Authentication & Security (Argon2 / Bcrypt + JWT)

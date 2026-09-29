@@ -26,8 +26,6 @@ Domain Architecture & Constraints Encoded:
    - HEAD_OF_DEPT: Global CRUD across all hospitals, user management, fatigue analytics & exports.
 """
 
-from __future__ import annotations
-
 import time
 from enum import Enum
 from typing import Dict, List, Optional, Set

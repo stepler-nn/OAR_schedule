@@ -42,6 +42,18 @@ app.add_middleware(
 )
 
 API_V1_PREFIX = "/api/v1"
+
+
+@app.get(f"{API_V1_PREFIX}/health", tags=["System Health"])
+@app.get("/health", tags=["System Health"])
+async def health_check() -> dict[str, str]:
+    """Healthcheck endpoint used by Docker Compose and Host Caddy."""
+    return {
+        "status": "ok",
+        "engine": "sqlite+aiosqlite (WAL, FK=ON)",
+    }
+
+
 app.include_router(auth.router, prefix=API_V1_PREFIX)
 app.include_router(shifts.router, prefix=API_V1_PREFIX)
 app.include_router(requests.router, prefix=API_V1_PREFIX)

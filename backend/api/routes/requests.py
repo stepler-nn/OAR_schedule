@@ -13,8 +13,6 @@ Endpoints:
   revisions (`REVISION_REQUESTED -> PROPOSED`) and cancellations (`CANCELLED`).
 """
 
-from __future__ import annotations
-
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status

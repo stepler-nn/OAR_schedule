@@ -8,8 +8,6 @@ Endpoints:
   `assigned_hospital_id`, and clinical specialty skills.
 """
 
-from __future__ import annotations
-
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status

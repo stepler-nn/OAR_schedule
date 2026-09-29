@@ -16,8 +16,6 @@ Domain & RBAC Rules Enforced:
      consistency, and non-blocking 32-hour `FATIGUE_RISK_HIGH` tagging.
 """
 
-from __future__ import annotations
-
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status

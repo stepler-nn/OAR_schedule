@@ -9,11 +9,9 @@ Security Architecture:
    so downstream FastAPI dependencies can evaluate RBAC rules with zero ambiguity.
 """
 
-from __future__ import annotations
-
 import os
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -89,7 +87,7 @@ def create_access_token(
     role: UserRole,
     assigned_hospital_id: Optional[int] = None,
     expires_delta_seconds: Optional[int] = None,
-) -> TupleToken:
+) -> Tuple[str, int]:
     """
     Creates a signed JWT containing identity and RBAC scope claims.
     Returns `(encoded_jwt, expires_in_seconds)`.

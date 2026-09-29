@@ -15,8 +15,6 @@ Domain Responsibilities:
      `assigned_hospital_id`; Head of Dept views global attendance across all hospitals.
 """
 
-from __future__ import annotations
-
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status

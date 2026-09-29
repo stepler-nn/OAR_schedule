@@ -16,8 +16,6 @@ RBAC Enforcement Matrix:
      * `DOCTOR`: Read-only schedule visibility; raises `403 Forbidden` on hospital management actions.
 """
 
-from __future__ import annotations
-
 from typing import Callable, Coroutine, Any, Optional, Sequence
 
 from fastapi import Depends, HTTPException, Path, Query, status

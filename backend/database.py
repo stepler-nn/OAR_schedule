@@ -21,7 +21,6 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 from sqlalchemy import event, text
-from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -33,16 +32,28 @@ from sqlmodel import SQLModel
 # Import models so SQLModel.metadata registers all tables before init_db() runs
 import models  # noqa: F401
 
-# Default self-hosted SQLite database file path (override via DATABASE_URL env var in Docker)
-DATABASE_URL: str = os.getenv(
-    "DATABASE_URL",
-    "sqlite+aiosqlite:///./data/anesthesia_icu_scheduler.db",
-)
+
+def _resolve_database_url() -> str:
+    """
+    Resolves the async SQLite connection URL from either `DATABASE_URL` or `SQLITE_DB_PATH`.
+    Ensures absolute file paths (e.g., `/app/data/medical_scheduler.db`) use four slashes
+    (`sqlite+aiosqlite:////app/data/medical_scheduler.db`).
+    """
+    explicit_url = os.getenv("DATABASE_URL")
+    if explicit_url:
+        return explicit_url
+
+    sqlite_path = os.getenv("SQLITE_DB_PATH", "/app/data/medical_scheduler.db")
+    abs_path = os.path.abspath(sqlite_path)
+    return f"sqlite+aiosqlite:///{abs_path}"
+
+
+DATABASE_URL: str = _resolve_database_url()
 
 # Create the AsyncEngine for SQLite via aiosqlite
 engine: AsyncEngine = create_async_engine(
     DATABASE_URL,
-    echo=os.getenv("SQL_ECHO", "false").lower() == "true",
+    echo=os.getenv("SQLITE_ECHO", os.getenv("SQL_ECHO", "false")).lower() == "true",
     future=True,
     connect_args={
         # Allow aiosqlite worker thread to share connection safely with FastAPI's event loop
@@ -91,7 +102,6 @@ async def init_db() -> None:
     and verifies that WAL mode and Foreign Keys are active.
     Call this inside FastAPI's lifespan startup context.
     """
-    # Ensure parent folder exists if using a local file path
     if DATABASE_URL.startswith("sqlite+aiosqlite:///"):
         raw_path = DATABASE_URL.replace("sqlite+aiosqlite:///", "", 1)
         db_dir = os.path.dirname(os.path.abspath(raw_path))
@@ -105,7 +115,10 @@ async def init_db() -> None:
         journal_mode = (await conn.execute(text("PRAGMA journal_mode;"))).scalar_one()
         fk_enabled = (await conn.execute(text("PRAGMA foreign_keys;"))).scalar_one()
         if str(journal_mode).lower() != "wal":
-            raise RuntimeError(f"Expected SQLite WAL mode, got: {journal_mode}")
+            raise RuntimeError(
+                f"Expected SQLite WAL mode, got '{journal_mode}'. "
+                f"Check that parent directory of '{DATABASE_URL}' is writable by container UID 10001."
+            )
         if int(fk_enabled) != 1:
             raise RuntimeError("SQLite PRAGMA foreign_keys failed to enable.")
 
@@ -133,15 +146,7 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
 @asynccontextmanager
 async def atomic_transaction(session: AsyncSession) -> AsyncGenerator[AsyncSession, None]:
     """
-    Explicit atomic transaction boundary for critical domain operations
-    (e.g., transitioning a ShiftRequest to APPROVED, swapping Shift.doctor_id on both
-    parent Base Shifts and child Operational Tasks, and appending an AuditLog).
-
-    Usage:
-        async with atomic_transaction(session):
-            shift_a.doctor_id, shift_b.doctor_id = shift_b.doctor_id, shift_a.doctor_id
-            swap_request.transition_to(RequestStatus.APPROVED)
-            session.add(audit_entry)
+    Explicit atomic transaction boundary for critical domain operations.
     """
     if session.in_transaction():
         async with session.begin_nested():
