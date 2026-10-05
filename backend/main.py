@@ -7,11 +7,14 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 
 from api.routes import analytics, auth, requests, shifts, timelogs
-from database import close_db, init_db
+from database import close_db, get_session, init_db
+from models import Hospital, Shift, ShiftRequest, ShiftStatus, User, Workplace
 
 
 @asynccontextmanager
@@ -51,6 +54,93 @@ async def health_check() -> dict[str, str]:
     return {
         "status": "ok",
         "engine": "sqlite+aiosqlite (WAL, FK=ON)",
+    }
+
+
+@app.get(f"{API_V1_PREFIX}/bootstrap", tags=["Bootstrap"])
+async def bootstrap(session: AsyncSession = Depends(get_session)) -> dict:
+    """Returns all master data (hospitals, workplaces, physicians, shifts, and swap requests) for frontend initialization."""
+    hospitals = (await session.execute(select(Hospital).order_by(Hospital.id))).scalars().all()
+    workplaces = (await session.execute(select(Workplace).order_by(Workplace.id))).scalars().all()
+    doctors = (await session.execute(select(User).order_by(User.id))).scalars().all()
+    shifts_res = (
+        await session.execute(
+            select(Shift).where(Shift.status != ShiftStatus.CANCELLED).order_by(Shift.start_ts, Shift.id)
+        )
+    ).scalars().all()
+    requests_res = (
+        await session.execute(select(ShiftRequest).order_by(ShiftRequest.updated_at.desc(), ShiftRequest.id.desc()))
+    ).scalars().all()
+
+    return {
+        "hospitals": [
+            {
+                "id": h.id,
+                "code": h.code,
+                "name": h.name,
+                "address": h.address,
+                "requires24hIcuCoverage": h.requires_24h_icu_coverage,
+            }
+            for h in hospitals
+        ],
+        "workplaces": [
+            {
+                "id": w.id,
+                "hospitalId": w.hospital_id,
+                "code": w.code,
+                "name": w.name,
+                "type": w.workplace_type.value,
+                "requiredSkills": w.required_skills,
+            }
+            for w in workplaces
+        ],
+        "doctors": [
+            {
+                "id": d.id,
+                "fullName": d.full_name,
+                "email": d.email,
+                "role": d.role.value,
+                "primaryHospitalId": d.assigned_hospital_id or (hospitals[0].id if hospitals else 1),
+                "assignedHospitalId": d.assigned_hospital_id,
+                "primarySkill": d.skills[0] if d.skills else "General Anesthesia",
+                "skills": d.skills,
+                "contractWeeklyHours": d.contract_weekly_hours,
+            }
+            for d in doctors
+        ],
+        "shifts": [
+            {
+                "id": s.id,
+                "shiftType": s.shift_type.value,
+                "parentShiftId": s.parent_shift_id,
+                "doctorId": s.doctor_id,
+                "hospitalId": s.hospital_id,
+                "workplaceId": s.workplace_id,
+                "startTs": s.start_ts,
+                "endTs": s.end_ts,
+                "status": s.status.value,
+                "is24hIcuDuty": s.is_24h_icu_duty,
+                "isFatigueRisk": s.is_fatigue_risk,
+                "continuousHoursAtEnd": s.continuous_hours_at_end,
+                "fatigueRiskHours": s.fatigue_risk_hours,
+                "notes": s.notes or "",
+            }
+            for s in shifts_res
+        ],
+        "swapRequests": [
+            {
+                "id": r.id,
+                "requestType": r.request_type.value,
+                "status": r.status.value,
+                "hospitalId": r.hospital_id,
+                "requesterId": r.requester_id,
+                "targetDoctorId": r.target_doctor_id,
+                "sourceShiftId": r.source_shift_id,
+                "targetShiftId": r.target_shift_id,
+                "reason": r.reason or "",
+            }
+            for r in requests_res
+        ],
     }
 
 

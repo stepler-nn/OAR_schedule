@@ -9,10 +9,14 @@
     can edit ONLY their `assignedHospitalId` rows; Head of Dept has global edit & approval access.
 -->
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useScheduleStore } from '../stores/schedule';
 
 const store = useScheduleStore();
+
+onMounted(() => {
+  store.fetchSchedule();
+});
 
 // Quick-Edit & Swap Modal State
 const isModalOpen = ref(false);
@@ -30,36 +34,54 @@ const formChildDurationHours = ref(8);
 const formSwapTargetDoctorId = ref(null);
 const formSwapReason = ref('');
 
-// Role Switcher Presets to test RBAC enforcement in UI
-const rolePresets = [
-  {
-    label: 'Dr. Elena Vance (DOCTOR · Read-Only + Swap)',
-    id: 103,
-    fullName: 'Dr. Elena Vance',
-    role: 'DOCTOR',
-    assignedHospitalId: null,
-  },
-  {
-    label: 'Dr. Henrik Lindqvist (SENIOR_RESIDENT · HOSP-A Only)',
-    id: 102,
-    fullName: 'Dr. Henrik Lindqvist',
-    role: 'SENIOR_RESIDENT',
-    assignedHospitalId: 1,
-  },
-  {
-    label: 'Dr. Clara Johansson (HEAD_OF_DEPT · All 3 Hospitals)',
-    id: 101,
-    fullName: 'Dr. Clara Johansson',
-    role: 'HEAD_OF_DEPT',
-    assignedHospitalId: null,
-  },
-];
+// Dynamic Role Switcher Presets based on seeded database physicians
+const rolePresets = computed(() => {
+  if (store.doctors && store.doctors.length > 0) {
+    const head = store.doctors.find((d) => d.role === 'HEAD_OF_DEPT');
+    const srs = store.doctors.filter((d) => d.role === 'SENIOR_RESIDENT');
+    const docs = store.doctors.filter((d) => d.role === 'DOCTOR');
+    const list = [];
+    if (head) {
+      list.push({
+        label: `${head.fullName} (HEAD_OF_DEPT · All Hospitals)`,
+        id: head.id,
+        fullName: head.fullName,
+        email: head.email,
+        role: head.role,
+        assignedHospitalId: head.assignedHospitalId,
+      });
+    }
+    srs.forEach((sr) => {
+      const hosp = store.hospitals.find((h) => h.id === sr.assignedHospitalId);
+      list.push({
+        label: `${sr.fullName} (SENIOR_RESIDENT · ${hosp ? hosp.name : 'Hospital ' + sr.assignedHospitalId})`,
+        id: sr.id,
+        fullName: sr.fullName,
+        email: sr.email,
+        role: sr.role,
+        assignedHospitalId: sr.assignedHospitalId,
+      });
+    });
+    if (docs[0]) {
+      list.push({
+        label: `${docs[0].fullName} (DOCTOR · Read-Only + Swap)`,
+        id: docs[0].id,
+        fullName: docs[0].fullName,
+        email: docs[0].email,
+        role: docs[0].role,
+        assignedHospitalId: docs[0].assignedHospitalId,
+      });
+    }
+    return list;
+  }
+  return [];
+});
 
 function applyRolePreset(preset) {
   store.currentUser = {
     id: preset.id,
     fullName: preset.fullName,
-    email: `${preset.id}@chronomed.org`,
+    email: preset.email || `${preset.id}@chronomed.org`,
     role: preset.role,
     assignedHospitalId: preset.assignedHospitalId,
   };

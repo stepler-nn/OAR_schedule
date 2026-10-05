@@ -26,7 +26,7 @@ docker compose up -d --build --remove-orphans
 
 echo "==> [4/6] Building Vue 3 PWA frontend bundle..."
 cd "${APP_DIR}/frontend"
-npm ci
+if [ -f package-lock.json ]; then npm ci; else npm install; fi
 npm run build
 
 echo "==> [5/6] Syncing compiled frontend to ${WEB_ROOT}..."

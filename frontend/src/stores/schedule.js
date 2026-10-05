@@ -809,6 +809,66 @@ export const useScheduleStore = defineStore('schedule', () => {
     return req;
   }
 
+  /**
+   * Fetches real master data and shifts from FastAPI (/api/v1/bootstrap).
+   * Populates seeded hospitals (Hospital One, Three, Four), 18 workplaces, 30 doctors,
+   * and 30-day shift schedules with coverage gaps & fatigue risk triggers.
+   */
+  async function fetchScheduleFromApi() {
+    isLoading.value = true;
+    lastError.value = null;
+    try {
+      const res = await fetch(`${apiBaseUrl.value}/bootstrap`);
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: Failed to fetch schedule bootstrap`);
+      }
+      const data = await res.json();
+      if (Array.isArray(data.hospitals) && data.hospitals.length > 0) {
+        hospitals.value = data.hospitals;
+      }
+      if (Array.isArray(data.workplaces) && data.workplaces.length > 0) {
+        workplaces.value = data.workplaces;
+      }
+      if (Array.isArray(data.doctors) && data.doctors.length > 0) {
+        doctors.value = data.doctors;
+        // Default active user to Head of Dept or Senior Resident from seeded DB
+        const headDoc = data.doctors.find((d) => d.role === 'HEAD_OF_DEPT') || data.doctors[0];
+        if (headDoc && (!currentUser.value || currentUser.value.id === 102)) {
+          currentUser.value = {
+            id: headDoc.id,
+            fullName: headDoc.fullName,
+            email: headDoc.email,
+            role: headDoc.role,
+            assignedHospitalId: headDoc.assignedHospitalId,
+          };
+        }
+      }
+      if (Array.isArray(data.shifts) && data.shifts.length > 0) {
+        shifts.value = data.shifts;
+        // Anchor viewport rangeStartTs to the earliest seeded shift date
+        const minTs = Math.min(...data.shifts.map((s) => s.startTs));
+        if (Number.isFinite(minTs) && minTs > 0) {
+          const shiftDate = new Date(minTs * 1000);
+          const midnightEpoch = Math.floor(
+            Date.UTC(shiftDate.getUTCFullYear(), shiftDate.getUTCMonth(), shiftDate.getUTCDate()) / 1000
+          );
+          rangeStartTs.value = midnightEpoch;
+        }
+      }
+      if (Array.isArray(data.swapRequests) && data.swapRequests.length > 0) {
+        swapRequests.value = data.swapRequests;
+      }
+    } catch (err) {
+      console.warn('Could not load live API schedule, keeping local store state:', err);
+      lastError.value = err.message;
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  // Auto-fetch on store creation
+  fetchScheduleFromApi();
+
   return {
     currentUser,
     authToken,
@@ -833,5 +893,7 @@ export const useScheduleStore = defineStore('schedule', () => {
     getCellAllocations,
     saveShiftAllocation,
     transitionSwapFsm,
+    fetchSchedule: fetchScheduleFromApi,
+    fetchScheduleFromApi,
   };
 });
