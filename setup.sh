@@ -145,8 +145,9 @@ success "Core system utilities installed."
 info "[2/9] Installing Caddy web server (official Debian/Ubuntu repo)..."
 if ! command -v caddy &>/dev/null; then
   mkdir -p /etc/apt/keyrings
-  curl -1sLF 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor --yes -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-  curl -1sLF 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
+  apt-get install -y debian-keyring debian-archive-keyring apt-transport-https
+  curl -fsSL 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor --yes -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+  curl -fsSL 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
   apt-get update -y
   apt-get install -y caddy
   success "Caddy installed: $(caddy version | head -n 1)"
