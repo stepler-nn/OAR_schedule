@@ -292,12 +292,7 @@ fi
 info "[8/9] Compiling Vue 3 PWA frontend bundle..."
 cd "${APP_DIR}/frontend"
 
-if [[ -f "package-lock.json" ]]; then
-  npm ci
-else
-  npm install
-fi
-
+npm install
 npm run build
 
 # Deploy compiled bundle to host web root for Caddy
