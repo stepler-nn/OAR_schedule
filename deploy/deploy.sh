@@ -36,6 +36,11 @@ sudo chown -R caddy:caddy "${WEB_ROOT}"
 sudo chmod -R 755 "${WEB_ROOT}"
 
 echo "==> [6/6] Validating & reloading Host Caddy..."
+sudo mkdir -p /var/log/caddy
+sudo touch /var/log/caddy/chronomed-access.log
+sudo chown -R caddy:caddy /var/log/caddy
+sudo chmod 755 /var/log/caddy
+sudo chmod 644 /var/log/caddy/chronomed-access.log
 sudo caddy validate --config /etc/caddy/Caddyfile
 sudo systemctl reload caddy
 

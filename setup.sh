@@ -378,6 +378,13 @@ ${DOMAIN} {
 }
 EOF
 
+# Ensure Caddy log directory and log file are owned by the caddy service user
+mkdir -p /var/log/caddy
+touch /var/log/caddy/chronomed-access.log
+chown -R caddy:caddy /var/log/caddy
+chmod 755 /var/log/caddy
+chmod 644 /var/log/caddy/chronomed-access.log
+
 # Validate syntax and reload Caddy
 caddy validate --config /etc/caddy/Caddyfile
 systemctl enable caddy
