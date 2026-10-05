@@ -10,6 +10,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useScheduleStore } from '../stores/schedule';
+import api from '../services/api';
 
 const props = defineProps({
   compact: {
@@ -112,26 +113,14 @@ async function handleCheckIn() {
   };
 
   try {
-    const res = await fetch(`${store.apiBaseUrl}/timelogs/check-in`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(store.authToken ? { Authorization: `Bearer ${store.authToken}` } : {}),
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      activeTimeLog.value = {
-        id: data.id,
-        shiftId: data.shift_id,
-        checkInTs: data.check_in_ts,
-        checkOutTs: null,
-      };
-    } else {
-      throw new Error('Fallback to local PWA attendance state');
-    }
+    const res = await api.post('/timelogs/check-in', payload);
+    const data = res.data;
+    activeTimeLog.value = {
+      id: data.id,
+      shiftId: data.shift_id,
+      checkInTs: data.check_in_ts,
+      checkOutTs: null,
+    };
   } catch {
     // Offline-resilient fallback for hospital dead zones
     activeTimeLog.value = {
@@ -157,13 +146,8 @@ async function handleCheckOut() {
   );
 
   try {
-    await fetch(`${store.apiBaseUrl}/timelogs/${activeTimeLog.value.id}/check-out`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(store.authToken ? { Authorization: `Bearer ${store.authToken}` } : {}),
-      },
-      body: JSON.stringify({ check_out_ts: checkOutEpoch }),
+    await api.post(`/timelogs/${activeTimeLog.value.id}/check-out`, {
+      check_out_ts: checkOutEpoch,
     });
   } catch {
     // Offline queue sync handled by Service Worker

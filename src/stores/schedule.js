@@ -1,19 +1,5 @@
 /**
- * stores/schedule.js — Pinia Store for the Anesthesiology & ICU Resource-Timeline Matrix.
- *
- * State:
- * - shifts: Array of 24h Parent Base Shifts and child OR tasks.
- * - hospitals: Array of active clinical facilities (Hospital One, Three, Four).
- * - coverageGaps: Array of real-time ICU coverage gap alerts from /api/v1/analytics/coverage-gaps.
- * - fatigueAlerts: Array of >24h (32h) continuous duty alerts from /api/v1/analytics/fatigue-metrics.
- * - selectedDateRange: Active temporal window { startTs, endTs } in UTC Unix epoch seconds.
- * - selectedHospitalId: Filter ('ALL' | 1 | 2 | 3).
- *
- * Actions:
- * - fetchSchedule(params): Loads live bootstrap data (/bootstrap or /shifts) and runs analytics.
- * - createShift(shiftData): Dispatches POST /api/v1/shifts with overlap & fatigue checks.
- * - requestSwap(swapData): Dispatches POST /api/v1/requests to initiate an FSM shift swap.
- * - fetchAnalytics(startTs, endTs, hospitalId): Gathers coverage gaps & 32h fatigue metrics.
+ * src/stores/schedule.js — Pinia Store for the Anesthesiology & ICU Resource-Timeline Matrix.
  */
 
 import { defineStore } from 'pinia';
@@ -24,34 +10,24 @@ const SECONDS_PER_HOUR = 3600;
 const SECONDS_PER_DAY = 86400;
 
 export const useScheduleStore = defineStore('schedule', () => {
-  // =========================================================================
-  // 1. REACTIVE STATE
-  // =========================================================================
-
-  // Core Data Collections
   const shifts = ref([]);
   const hospitals = ref([]);
   const workplaces = ref([]);
   const doctors = ref([]);
   const swapRequests = ref([]);
-
-  // Analytics & Risk Telemetry
   const coverageGaps = ref([]);
   const fatigueAlerts = ref([]);
 
-  // Filter & Viewport Navigation
-  const viewMode = ref('week'); // 'week' (7 days) | 'month' (14/28 days)
+  const viewMode = ref('week');
   const rangeStartTs = ref(getTodayMidnightUtc());
-  const selectedHospitalId = ref('ALL'); // 'ALL' | 1 | 2 | 3
+  const selectedHospitalId = ref('ALL');
   const doctorSearchQuery = ref('');
   const showOrTasks = ref(true);
 
-  // Status & Telemetry
   const isLoading = ref(false);
   const lastError = ref(null);
   const lastWarningBanner = ref(null);
 
-  // Active authenticated user profile (can be switched in UI for testing RBAC)
   const currentUser = ref({
     id: 1,
     fullName: 'Dr. Alexander Vance',
@@ -67,13 +43,6 @@ export const useScheduleStore = defineStore('schedule', () => {
     );
   }
 
-  // =========================================================================
-  // 2. COMPUTED GETTERS
-  // =========================================================================
-
-  /**
-   * Active selected date range object { startTs, endTs }
-   */
   const selectedDateRange = computed(() => {
     const daysCount = viewMode.value === 'month' ? 14 : 7;
     return {
@@ -82,9 +51,6 @@ export const useScheduleStore = defineStore('schedule', () => {
     };
   });
 
-  /**
-   * Calendar Day Columns for the Resource-Timeline Grid.
-   */
   const calendarDays = computed(() => {
     const daysCount = viewMode.value === 'month' ? 14 : 7;
     const result = [];
@@ -108,16 +74,13 @@ export const useScheduleStore = defineStore('schedule', () => {
         dayIso,
         weekdayShort,
         monthDay,
-        dutyWindowStartTs: dayStartTs + 8 * SECONDS_PER_HOUR, // 08:00 UTC shift start
-        dutyWindowEndTs: dayStartTs + 32 * SECONDS_PER_HOUR,  // 08:00 next day
+        dutyWindowStartTs: dayStartTs + 8 * SECONDS_PER_HOUR,
+        dutyWindowEndTs: dayStartTs + 32 * SECONDS_PER_HOUR,
       });
     }
     return result;
   });
 
-  /**
-   * Evaluates if current user can edit a hospital.
-   */
   function canEditHospital(hospitalId) {
     if (currentUser.value?.role === 'HEAD_OF_DEPT') return true;
     if (currentUser.value?.role === 'SENIOR_RESIDENT') {
@@ -126,9 +89,6 @@ export const useScheduleStore = defineStore('schedule', () => {
     return false;
   }
 
-  /**
-   * Groups doctors by Hospital and primary specialty skill, applying active filters.
-   */
   const groupedHospitalRows = computed(() => {
     const query = doctorSearchQuery.value.trim().toLowerCase();
     const visibleHospitals =
@@ -139,7 +99,6 @@ export const useScheduleStore = defineStore('schedule', () => {
     return visibleHospitals.map((hosp) => {
       const hospDoctors = doctors.value.filter((doc) => {
         if (doc.primaryHospitalId !== hosp.id && doc.assignedHospitalId !== hosp.id) {
-          // If unassigned, allow under first hospital
           if (doc.primaryHospitalId && doc.primaryHospitalId !== hosp.id) return false;
         }
         if (!query) return true;
@@ -158,10 +117,6 @@ export const useScheduleStore = defineStore('schedule', () => {
     });
   });
 
-  /**
-   * Computes coverage gaps per calendar day.
-   * Merges backend analytics coverageGaps with local evaluation.
-   */
   const coverageGapsByDay = computed(() => {
     const map = {};
     const targetHospitals =
@@ -171,8 +126,6 @@ export const useScheduleStore = defineStore('schedule', () => {
 
     for (const day of calendarDays.value) {
       const missingHospitals = [];
-
-      // Check backend coverage gaps first
       const backendGap = coverageGaps.value.find((g) => g.day_iso === day.dayIso);
       if (backendGap) {
         const matchingHosp = targetHospitals.find((h) => h.id === backendGap.hospital_id);
@@ -181,7 +134,6 @@ export const useScheduleStore = defineStore('schedule', () => {
         }
       }
 
-      // Check local shifts
       for (const hosp of targetHospitals) {
         if (!hosp.requires24hIcuCoverage) continue;
         const has24hIcu = shifts.value.some(
@@ -206,9 +158,6 @@ export const useScheduleStore = defineStore('schedule', () => {
     return map;
   });
 
-  /**
-   * Returns Base Shifts and child tasks for a specific cell (doctorId, day).
-   */
   function getCellAllocations(doctorId, day) {
     const baseShifts = shifts.value.filter(
       (s) =>
@@ -242,14 +191,6 @@ export const useScheduleStore = defineStore('schedule', () => {
     };
   }
 
-  // =========================================================================
-  // 3. ASYNC ACTIONS (API INTEGRATION)
-  // =========================================================================
-
-  /**
-   * Loads full schedule data from the FastAPI backend.
-   * Calls /api/v1/bootstrap and runs /analytics/coverage-gaps & /analytics/fatigue-metrics.
-   */
   async function fetchSchedule() {
     isLoading.value = true;
     lastError.value = null;
@@ -262,7 +203,6 @@ export const useScheduleStore = defineStore('schedule', () => {
       if (Array.isArray(data.workplaces)) workplaces.value = data.workplaces;
       if (Array.isArray(data.doctors)) {
         doctors.value = data.doctors;
-        // Keep active current user aligned with available doctors
         const defaultDoc =
           data.doctors.find((d) => d.role === 'HEAD_OF_DEPT') || data.doctors[0];
         if (defaultDoc && (!currentUser.value || currentUser.value.id === 1)) {
@@ -277,7 +217,6 @@ export const useScheduleStore = defineStore('schedule', () => {
       }
       if (Array.isArray(data.shifts)) {
         shifts.value = data.shifts;
-        // Anchor viewport rangeStartTs to the earliest shift
         const validStartTimestamps = data.shifts
           .map((s) => s.startTs)
           .filter((ts) => Number.isFinite(ts) && ts > 0);
@@ -291,9 +230,7 @@ export const useScheduleStore = defineStore('schedule', () => {
       }
       if (Array.isArray(data.swapRequests)) swapRequests.value = data.swapRequests;
 
-      // Also trigger analytics for the current window
       await fetchAnalytics(selectedDateRange.value.startTs, selectedDateRange.value.endTs);
-
       return data;
     } catch (err) {
       console.warn('[ScheduleStore] Live API bootstrap failed, falling back:', err);
@@ -303,10 +240,6 @@ export const useScheduleStore = defineStore('schedule', () => {
     }
   }
 
-  /**
-   * Creates a new Shift or child Operational Task via POST /api/v1/shifts.
-   * @param {Object} shiftData
-   */
   async function createShift(shiftData) {
     isLoading.value = true;
     lastError.value = null;
@@ -352,9 +285,7 @@ export const useScheduleStore = defineStore('schedule', () => {
         lastWarningBanner.value = `FATIGUE_RISK_HIGH: Shift creates ${created.continuous_hours_at_end}h continuous duty (+${created.fatigue_risk_hours}h over 24h threshold).`;
       }
 
-      // Re-fetch analytics
       fetchAnalytics(selectedDateRange.value.startTs, selectedDateRange.value.endTs);
-
       return formattedShift;
     } catch (err) {
       const detail = err.response?.data?.detail;
@@ -367,10 +298,6 @@ export const useScheduleStore = defineStore('schedule', () => {
     }
   }
 
-  /**
-   * Initiates an FSM shift swap request via POST /api/v1/requests.
-   * @param {{ hospitalId: number, sourceShiftId: number, targetDoctorId: number, targetShiftId?: number, reason?: string }} swapData
-   */
   async function requestSwap(swapData) {
     isLoading.value = true;
     lastError.value = null;
@@ -402,8 +329,6 @@ export const useScheduleStore = defineStore('schedule', () => {
       };
 
       swapRequests.value.unshift(formattedReq);
-
-      // Mark the source shift as PENDING_SWAP locally
       const srcShift = shifts.value.find((s) => s.id === swapData.sourceShiftId);
       if (srcShift) srcShift.status = 'PENDING_SWAP';
 
@@ -419,9 +344,6 @@ export const useScheduleStore = defineStore('schedule', () => {
     }
   }
 
-  /**
-   * Transitions a swap request (PEER_ACCEPTED, APPROVED, etc.).
-   */
   async function transitionSwapFsm({ requestId, targetStatus, sourceShiftId, targetDoctorId, reason }) {
     if (!requestId && sourceShiftId && targetDoctorId) {
       const src = shifts.value.find((s) => s.id === sourceShiftId);
@@ -464,9 +386,6 @@ export const useScheduleStore = defineStore('schedule', () => {
     }
   }
 
-  /**
-   * Fetches coverage gaps and fatigue risk metrics from analytics endpoints.
-   */
   async function fetchAnalytics(startTs, endTs, hospitalId = null) {
     const sTs = startTs || selectedDateRange.value.startTs;
     const eTs = endTs || selectedDateRange.value.endTs;
@@ -480,7 +399,6 @@ export const useScheduleStore = defineStore('schedule', () => {
         params.hospital_id = Number(hospitalId);
       }
 
-      // Fetch Coverage Gaps & Fatigue in parallel
       const [gapsRes, fatigueRes] = await Promise.allSettled([
         api.get('/analytics/coverage-gaps', { params }),
         api.get('/analytics/fatigue-metrics', { params }),
@@ -498,11 +416,9 @@ export const useScheduleStore = defineStore('schedule', () => {
     }
   }
 
-  // Auto-fetch on store creation
   fetchSchedule();
 
   return {
-    // State
     shifts,
     hospitals,
     workplaces,
@@ -520,15 +436,11 @@ export const useScheduleStore = defineStore('schedule', () => {
     lastError,
     lastWarningBanner,
     currentUser,
-
-    // Getters
     calendarDays,
     groupedHospitalRows,
     coverageGapsByDay,
     canEditHospital,
     getCellAllocations,
-
-    // Actions
     fetchSchedule,
     createShift,
     requestSwap,
