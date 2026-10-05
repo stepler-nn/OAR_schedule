@@ -280,6 +280,8 @@ done
 
 if [[ "$BACKEND_HEALTHY" = true ]]; then
   success "FastAPI backend is healthy: $(curl -fsS http://127.0.0.1:8000/api/v1/health)"
+  info "Seeding database with realistic initial data (3 Hospitals, 18 Workplaces, 30 Doctors, 30-day schedule)..."
+  docker compose exec -T backend python scripts/seed_data.py || warn "Auto-seeding skipped. You can seed anytime with: docker compose exec backend python scripts/seed_data.py"
 else
   warn "Backend did not respond immediately. Check logs with: docker compose logs backend"
 fi

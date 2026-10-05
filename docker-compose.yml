@@ -27,6 +27,7 @@ services:
     # Mount host directory for persistent SQLite .db, .db-wal, and .db-shm storage
     volumes:
       - ./data/sqlite:/app/data:rw
+      - ./scripts:/app/scripts:ro
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/api/v1/health"]
